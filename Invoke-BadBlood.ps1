@@ -8,18 +8,43 @@
     .OUTPUTS
        [String]
     .NOTES
-       Written by David Rowe, Blog secframe.com/blog
+       Written by David Rowe, Blog secframe.com
        Twitter : @davidprowe
-       I take no responsibility for any issues caused by this script.  I am not responsible if this gets run in a production domain.  
+       I take no responsibility for any issues caused by this script.  I am not responsible if this gets run in a production domain. 
+      Thanks HuskyHacks for user/group/computer count modifications.  I moved them to parameters so that this tool can be called in a more rapid fashion.
     .FUNCTIONALITY
        Adds a ton of stuff into a domain.  Adds Users, Groups, OUs, Computers, and a vast amount of ACLs in a domain.
     .LINK
        http://www.secframe.com/badblood
    
     #>
-
+[CmdletBinding()]
+    
+param
+(
+   [Parameter(Mandatory = $false,
+      Position = 1,
+      HelpMessage = 'Supply a count for user creation default 2500')]
+   [Int32]$UserCount = 2500,
+   [Parameter(Mandatory = $false,
+      Position = 2,
+      HelpMessage = 'Supply a count for user creation default 500')]
+   [int32]$GroupCount = 500,
+   [Parameter(Mandatory = $false,
+      Position = 3,
+      HelpMessage = 'Supply the script directory for where this script is stored')]
+   [int32]$ComputerCount = 100,
+   [Parameter(Mandatory = $false,
+      Position = 4,
+      HelpMessage = 'Skip the OU creation if you already have done it')]
+   [switch]$SkipOuCreation,
+   [Parameter(Mandatory = $false,
+      Position = 5,
+      HelpMessage = 'Skip the LAPS deployment if you already have done it')]
+   [switch]$SkipLapsInstall
+)
 function Get-ScriptDirectory {
-    Split-Path -Parent $PSCommandPath
+   Split-Path -Parent $PSCommandPath
 }
 $basescriptPath = Get-ScriptDirectory
 $totalscripts = 7
@@ -41,74 +66,99 @@ write-host "This is not intended for commercial use"
 Write-Host  'Press any key to continue...';
 write-host "`n"
 $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+
 write-host "`n"
+write-host "Domain size generated via parameters `n Users: $UserCount `n Groups: $GroupCount `n Computers: $ComputerCount"
+write-host "`n"
+
 $badblood = Read-Host -Prompt "Type `'badblood`' to deploy some randomness into a domain"
 $badblood.tolower()
-if($badblood -ne 'badblood'){exit}
-if($badblood -eq 'badblood'){
+if ($badblood -ne 'badblood') { exit }
+if ($badblood -eq 'badblood') {
    $Domain = Get-addomain
-    Write-Progress -Activity "Random Stuff into A domain" -Status "Progress:" -PercentComplete ($i/$totalscripts*100)
+
+   # LAPS STUFF
+   if ($PSBoundParameters.ContainsKey('SkipLapsInstall') -eq $false)
+      {
+         Write-Progress -Activity "Random Stuff into A domain" -Status "Progress:" -PercentComplete ($i / $totalscripts * 100)
+         .($basescriptPath + '\AD_LAPS_Install\InstallLAPSSchema.ps1')
+         Write-Progress -Activity "Random Stuff into A domain: Install LAPS" -Status "Progress:" -PercentComplete ($i / $totalscripts * 100)
+      }
+   else{}
+   
+   $I++
 
 
-    .($basescriptPath + '\AD_LAPS_Install\InstallLAPSSchema.ps1')
-    Write-Progress -Activity "Random Stuff into A domain: Install LAPS" -Status "Progress:" -PercentComplete ($i/$totalscripts*100)
-    $I++
-    .($basescriptPath + '\AD_OU_CreateStructure\CreateOUStructure.ps1')
-    Write-Progress -Activity "Random Stuff into A domain - Creating OUs" -Status "Progress:" -PercentComplete ($i/$totalscripts*100)
-    $I++
-    $ousAll = Get-adorganizationalunit -filter *
-    write-host "Creating Users on Domain" -ForegroundColor Green
-    $NumOfUsers = 1000..5000|Get-random #this number is the random number of users to create on a domain.  Todo: Make process createusers.ps1 in a parallel loop
-    $X=1
-    Write-Progress -Activity "Random Stuff into A domain - Creating Users" -Status "Progress:" -PercentComplete ($i/$totalscripts*100)
-    $I++
-    .($basescriptPath + '\AD_Users_Create\CreateUsers.ps1')
-    $createuserscriptpath = $basescriptPath + '\AD_Users_Create\'
-    do{
+   #OU Structure Creation
+   if ($PSBoundParameters.ContainsKey('SkipOuCreation') -eq $false)
+      {
+         .($basescriptPath + '\AD_OU_CreateStructure\CreateOUStructure.ps1')
+         Write-Progress -Activity "Random Stuff into A domain - Creating OUs" -Status "Progress:" -PercentComplete ($i / $totalscripts * 100)
+      }
+   else{}
+   $I++
+
+   # User Creation
+   $ousAll = Get-adorganizationalunit -filter *
+   write-host "Creating Users on Domain" -ForegroundColor Green
+    
+   $x = 1
+   Write-Progress -Activity "Random Stuff into A domain - Creating Users" -Status "Progress:" -PercentComplete ($i / $totalscripts * 100)
+   $I++
+   .($basescriptPath + '\AD_Users_Create\CreateUsers.ps1')
+   $createuserscriptpath = $basescriptPath + '\AD_Users_Create\'
+   do {
       createuser -Domain $Domain -OUList $ousAll -ScriptDir $createuserscriptpath
-        Write-Progress -Activity "Random Stuff into A domain - Creating $NumOfUsers Users" -Status "Progress:" -PercentComplete ($x/$NumOfUsers*100)
-    $x++
-    }while($x -lt $NumOfUsers)
-    $AllUsers = Get-aduser -Filter *
+      Write-Progress -Activity "Random Stuff into A domain - Creating $UserCount Users" -Status "Progress:" -PercentComplete ($x / $UserCount * 100)
+      $x++
+   }while ($x -lt $UserCount)
+
+   #Group Creation
+   $AllUsers = Get-aduser -Filter *
+   write-host "Creating Groups on Domain" -ForegroundColor Green
+
+   $x = 1
+   Write-Progress -Activity "Random Stuff into A domain - Creating $GroupCount Groups" -Status "Progress:" -PercentComplete ($i / $totalscripts * 100)
+   $i++
+   .($basescriptPath + '\AD_Groups_Create\CreateGroups.ps1')
     
-    write-host "Creating Groups on Domain" -ForegroundColor Green
-    $NumOfGroups = 100..500|Get-random 
-    $X=1
-    Write-Progress -Activity "Random Stuff into A domain - Creating $NumOfGroups Groups" -Status "Progress:" -PercentComplete ($i/$totalscripts*100)
-    $I++
-    .($basescriptPath + '\AD_Groups_Create\CreateGroups.ps1')
+   do {
+      Creategroup
+      Write-Progress -Activity "Random Stuff into A domain - Creating $GroupCount Groups" -Status "Progress:" -PercentComplete ($x / $GroupCount * 100)
+      $x++
+   }while ($x -lt $GroupCount)
+   $Grouplist = Get-ADGroup -Filter { GroupCategory -eq "Security" -and GroupScope -eq "Global" } -Properties isCriticalSystemObject
+   $LocalGroupList = Get-ADGroup -Filter { GroupScope -eq "domainlocal" } -Properties isCriticalSystemObject
+
+   #Computer Creation Time
+   write-host "Creating Computers on Domain" -ForegroundColor Green
+
+   $X = 1
+   Write-Progress -Activity "Random Stuff into A domain - Creating Computers" -Status "Progress:" -PercentComplete ($i / $totalscripts * 100)
+   .($basescriptPath + '\AD_Computers_Create\CreateComputers.ps1')
+   $I++
+   do {
+      Write-Progress -Activity "Random Stuff into A domain - Creating $ComputerCount computers" -Status "Progress:" -PercentComplete ($x / $ComputerCount * 100)
+      createcomputer
+      $x++
+   }while ($x -lt $ComputerCount)
+   $Complist = get-adcomputer -filter *
     
-    do{
-        Creategroup
-        Write-Progress -Activity "Random Stuff into A domain - Creating $NumOfGroups Groups" -Status "Progress:" -PercentComplete ($x/$NumOfGroups*100)
-    
-    $x++
-    }while($x -lt $NumOfGroups)
-    $Grouplist = Get-ADGroup -Filter { GroupCategory -eq "Security" -and GroupScope -eq "Global"  } -Properties isCriticalSystemObject
-    $LocalGroupList =  Get-ADGroup -Filter { GroupScope -eq "domainlocal"  } -Properties isCriticalSystemObject
-    write-host "Creating Computers on Domain" -ForegroundColor Green
-    $NumOfComps = 50..150|Get-random 
-    $X=1
-    Write-Progress -Activity "Random Stuff into A domain - Creating Computers" -Status "Progress:" -PercentComplete ($i/$totalscripts*100)
-    .($basescriptPath + '\AD_Computers_Create\CreateComputers.ps1')
-    $I++
-    do{
-        Write-Progress -Activity "Random Stuff into A domain - Creating $NumOfComps computers" -Status "Progress:" -PercentComplete ($x/$NumOfComps*100)
-        createcomputer
-    $x++
-    }while($x -lt $NumOfComps)
-    $Complist = get-adcomputer -filter *
-    
-    $I++
-    write-host "Creating Permissions on Domain" -ForegroundColor Green
-    Write-Progress -Activity "Random Stuff into A domain - Creating Random Permissions" -Status "Progress:" -PercentComplete ($i/$totalscripts*100)
-    .($basescriptPath + '\AD_Permissions_Randomizer\GenerateRandomPermissions.ps1')
+
+   #Permission Creation of ACLs
+   $I++
+   write-host "Creating Permissions on Domain" -ForegroundColor Green
+   Write-Progress -Activity "Random Stuff into A domain - Creating Random Permissions" -Status "Progress:" -PercentComplete ($i / $totalscripts * 100)
+   .($basescriptPath + '\AD_Permissions_Randomizer\GenerateRandomPermissions.ps1')
     
     
-    $I++
-    write-host "Nesting objects into groups on Domain" -ForegroundColor Green
-    .($basescriptPath + '\AD_Groups_Create\AddRandomToGroups.ps1')
-    Write-Progress -Activity "Random Stuff into A domain - Adding Stuff to Stuff and Things" -Status "Progress:" -PercentComplete ($i/$totalscripts*100)
-    AddRandomToGroups -Domain $Domain -Userlist $AllUsers -GroupList $Grouplist -LocalGroupList $LocalGroupList -complist $Complist
+   # Nesting of objects
+   $I++
+   write-host "Nesting objects into groups on Domain" -ForegroundColor Green
+   .($basescriptPath + '\AD_Groups_Create\AddRandomToGroups.ps1')
+   Write-Progress -Activity "Random Stuff into A domain - Adding Stuff to Stuff and Things" -Status "Progress:" -PercentComplete ($i / $totalscripts * 100)
+   AddRandomToGroups -Domain $Domain -Userlist $AllUsers -GroupList $Grouplist -LocalGroupList $LocalGroupList -complist $Complist
     
+
+
 }
